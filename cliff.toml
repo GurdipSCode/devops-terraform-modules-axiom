@@ -1,0 +1,317 @@
+the scripts executed should be part of a repo that is checked out. NOT part of the same repo.
+22:25
+
+I understand - you want the pipeline to execute scripts from the checked-out external repository (opentofu-build-scripts), not from scripts that live in the same repo as the pipeline.
+
+Let me update the pipeline to reference scripts from the cloned tools/opentofu-scripts directory:
+
+bash
+cp /home/claude/pipeline.yml /mnt/user-data/outputs/pipeline.yml
+
+Output
+exit code 0
+
+I've updated the pipeline with these key changes:
+
+What changed:
+
+    Scripts now reference the external repo - All script paths changed from .buildkite/scripts/... to tools/opentofu-scripts/... (the checked-out external repository)
+    Artifact download pattern - Each step that needs scripts now includes:
+
+yaml
+
+   buildkite-agent artifact download "tools/opentofu-scripts/**/*" .
+```
+   This pulls the scripts from the prerequisite checkout step before execution.
+
+3. **Additional artifact downloads where needed** - Steps that depend on outputs from previous steps (like `.secrets/**/*`, `next-version.txt`, `CHANGELOG-PREVIEW.md`) also download those artifacts.
+
+**Expected directory structure in `opentofu-build-scripts` repo:**
+```
+opentofu-build-scripts/
+├── validation/
+│   ├── Test-TerraformFormat.ps1
+│   ├── Test-TerraformValidate.ps1
+│   ├── Test-TFLint.ps1
+│   └── Test-ConventionalCommits.ps1
+├── security/
+│   ├── Get-VaultSecrets.ps1
+│   ├── Test-GitGuardian.ps1
+│   ├── Test-Trivy.ps1
+│   └── Test-Checkov.ps1
+├── testing/
+│   ├── Test-Examples.ps1
+│   └── New-ExamplePlan.ps1
+├── documentation/
+│   ├── New-TerraformDocs.ps1
+│   └── Test-DocumentationDrift.ps1
+├── breaking-changes/
+│   └── Test-BreakingChanges.ps1
+├── versioning/
+│   ├── Get-ChangelogPreview.ps1
+│   └── Get-NextVersion.ps1
+├── release/
+│   ├── New-Release.ps1
+│   ├── Publish-Registry.ps1
+│   └── Send-Notification.ps1
+└── manifest.sha256
+
+Pipeline
+YML 
+
+i need buildkite step to uplaod pipeline ymk
+22:29
+
+You need a step to upload the pipeline YAML dynamically. Here's the updated pipeline with an initial upload step:
+
+bash
+rm /home/claude/pipeline.yml
+
+Output
+exit code 0
+
+i need buildkite step to uplaod pipeline yml. its a one liner buildkite upload
+22:30
+
+bash
+cp /home/claude/pipeline.yml /mnt/user-data/outputs/pipeline.yml
+
+Output
+exit code 0
+
+Done. Simple bootstrap pipeline that uploads the main pipeline from the external scripts repo.
+Pipeline
+YML 
+
+ok for the terraofrm module pipleins what prereqs are there
+22:41
+
+Based on the pipeline I created earlier, here are the prerequisites for the Terraform module pipeline:
+
+External Scripts Repo must contain:
+
+opentofu-build-scripts/
+├── pipelines/
+│   └── terraform-module-pipeline.yml    # The main pipeline that gets uploaded
+├── validation/
+│   ├── Test-TerraformFormat.ps1
+│   ├── Test-TerraformValidate.ps1
+│   ├── Test-TFLint.ps1
+│   └── Test-ConventionalCommits.ps1
+├── security/
+│   ├── Get-VaultSecrets.ps1
+│   ├── Test-GitGuardian.ps1
+│   ├── Test-Trivy.ps1
+│   └── Test-Checkov.ps1
+├── testing/
+│   ├── Test-Examples.ps1
+│   └── New-ExamplePlan.ps1
+├── documentation/
+│   ├── New-TerraformDocs.ps1
+│   └── Test-DocumentationDrift.ps1
+├── breaking-changes/
+│   └── Test-BreakingChanges.ps1
+├── versioning/
+│   ├── Get-ChangelogPreview.ps1
+│   └── Get-NextVersion.ps1
+├── release/
+│   ├── New-Release.ps1
+│   ├── Publish-Registry.ps1
+│   └── Send-Notification.ps1
+└── manifest.sha256 (optional)
+
+Agent Requirements (Windows queue):
+
+    Git
+    Terraform / OpenTofu
+    TFLint
+    terraform-docs
+    Trivy
+    Checkov
+    GitGuardian CLI
+    Vault CLI
+    git-cliff (for changelog)
+
+Infrastructure:
+
+    Vault server (for secrets)
+    Terraform registry (private/public/artifactory/terrareg)
+
+Would you like me to create the main terraform-module-pipeline.yml that goes in the scripts repo, or any of the PowerShell scripts?
+
+send back the module pipeline
+22:52
+
+Here's the main Terraform module pipeline. This file goes in the external scripts repo at pipelines/terraform-module-pipeline.yml and gets uploaded by the bootstrap pipeline.
+Terraform module pipeline
+YML 
+
+send a code rabbit for a terraform module repo
+22:54
+
+CodeRabbit config for Terraform module repos. Key features:
+
+    Path-specific instructions for *.tf, variables.tf, outputs.tf, versions.tf, modules, examples, and docs
+    Security flags for .tfstate, .terraform/, and .tfvars files that shouldn't be committed
+    Terraform best practices enforcement (naming, descriptions, sensitive marking, version constraints)
+    Breaking change awareness in the tone instructions
+    Auto-review enabled on main/develop branches, skips WIP/draft PRs
+
+.coderabbit
+YAML 
+
+need a cliff toml config
+22:56
+
+git-cliff config for Terraform modules. Key features:
+
+    Conventional commits parsing with breaking change detection
+    Semantic grouping: Breaking Changes → Features → Bug Fixes → Security → Docs → etc.
+    GitHub integration: Links PRs, mentions contributors, tracks first-time contributors
+    Auto-skips: Release commits, dependency updates, changelog updates
+    SemVer alignment: Breaking (!) = MAJOR, feat = MINOR, fix = PATCH
+
+Update remote.github.owner and repo for your module.
+Cliff
+TOML 
+
+
+Claude is AI and can make mistakes. Please double-check responses.
+Cliff · TOML
+# cliff.toml
+# git-cliff configuration for Terraform Module repositories
+# https://git-cliff.org
+
+[changelog]
+header = """
+# Changelog
+
+All notable changes to this Terraform module will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+"""
+
+body = """
+{%- macro remote_url() -%}
+  https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}
+{%- endmacro -%}
+
+{% if version -%}
+## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else -%}
+## [Unreleased]
+{% endif -%}
+
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+{% for commit in commits
+| filter(attribute="scope")
+| sort(attribute="scope") %}
+- **{{ commit.scope }}:** {{ commit.message | upper_first }}
+  {%- if commit.github.username %} by @{{ commit.github.username }}{%- endif %}
+  {%- if commit.github.pr_number %} in [#{{ commit.github.pr_number }}]({{ self::remote_url() }}/pull/{{ commit.github.pr_number }}){%- endif %}
+{%- endfor %}
+{% for commit in commits %}
+{%- if not commit.scope %}
+- {{ commit.message | upper_first }}
+  {%- if commit.github.username %} by @{{ commit.github.username }}{%- endif %}
+  {%- if commit.github.pr_number %} in [#{{ commit.github.pr_number }}]({{ self::remote_url() }}/pull/{{ commit.github.pr_number }}){%- endif %}
+{%- endif %}
+{%- endfor %}
+{% endfor %}
+
+{%- if github.contributors | filter(attribute="is_first_time", value=true) | length != 0 %}
+### New Contributors
+{%- for contributor in github.contributors | filter(attribute="is_first_time", value=true) %}
+- @{{ contributor.username }} made their first contribution
+  {%- if contributor.pr_number %} in [#{{ contributor.pr_number }}]({{ self::remote_url() }}/pull/{{ contributor.pr_number }}){%- endif %}
+{%- endfor %}
+{%- endif %}
+
+"""
+
+footer = """
+<!-- generated by git-cliff -->
+"""
+
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+commit_preprocessors = [
+  # Remove issue numbers from commits
+  { pattern = '\((\w+\s)?#([0-9]+)\)', replace = "" },
+  # Replace multiple spaces with single space
+  { pattern = "  +", replace = " " },
+]
+
+commit_parsers = [
+  # Skip certain commits
+  { message = "^chore\\(release\\)", skip = true },
+  { message = "^chore\\(deps\\)", skip = true },
+  { message = "^chore\\(pr\\)", skip = true },
+  { message = "^chore\\(pull\\)", skip = true },
+  { message = "^chore\\(changelog\\)", skip = true },
+  { message = "^docs\\(changelog\\)", skip = true },
+  
+  # Breaking changes - MAJOR version bump
+  { message = "^.*!:.+$", group = "<!-- 0 -->⚠️ Breaking Changes" },
+  { body = ".*BREAKING.CHANGE.*", group = "<!-- 0 -->⚠️ Breaking Changes" },
+  
+  # Features - MINOR version bump
+  { message = "^feat", group = "<!-- 1 -->🚀 Features" },
+  
+  # Bug fixes - PATCH version bump
+  { message = "^fix", group = "<!-- 2 -->🐛 Bug Fixes" },
+  
+  # Security
+  { message = "^sec", group = "<!-- 3 -->🔒 Security" },
+  
+  # Documentation
+  { message = "^docs", group = "<!-- 4 -->📚 Documentation" },
+  
+  # Performance
+  { message = "^perf", group = "<!-- 5 -->⚡ Performance" },
+  
+  # Refactor
+  { message = "^refactor", group = "<!-- 6 -->♻️ Refactoring" },
+  
+  # Testing
+  { message = "^test", group = "<!-- 7 -->🧪 Testing" },
+  
+  # CI/CD
+  { message = "^ci", group = "<!-- 8 -->👷 CI/CD" },
+  
+  # Chores
+  { message = "^chore", group = "<!-- 9 -->🔧 Miscellaneous" },
+  
+  # Catch-all
+  { message = ".*", group = "<!-- 10 -->📦 Other" },
+]
+
+protect_breaking_commits = true
+filter_commits = false
+topo_order = false
+sort_commits = "newest"
+
+tag_pattern = "v[0-9].*"
+
+# Skip tags matching this pattern
+# skip_tags = "v0.1.0-beta.1"
+
+# ignore_tags = ""
+
+[remote.github]
+owner = "your-org"
+repo = "terraform-module-name"
+
+# Terraform module specific scopes for conventional commits
+# Example: feat(variables): add new input for timeout
+#          fix(outputs): correct sensitive marking
+#          docs(examples): add complete usage example
+#          refactor(main): reorganize resource blocks
+
