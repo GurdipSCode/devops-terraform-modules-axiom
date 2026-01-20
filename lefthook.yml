@@ -1,0 +1,88 @@
+# Lefthook configuration for OpenTofu module repositories
+# Windows-friendly (PowerShell), CI-friendly, minimal noise
+
+pre-commit:
+  parallel: true
+  commands:
+    tofu-fmt:
+      description: "OpenTofu format check"
+      glob: "*.tf"
+      run: |
+        if (Get-Command tofu -ErrorAction SilentlyContinue) {
+          tofu fmt -check -recursive
+        } else {
+          Write-Host "⚠ tofu not installed, skipping"
+        }
+      runner: powershell
+      skip:
+        - merge
+        - rebase
+
+    tofu-validate:
+      description: "OpenTofu validate (no backend)"
+      glob: "*.tf"
+      run: |
+        if (Get-Command tofu -ErrorAction SilentlyContinue) {
+          tofu init -backend=false -input=false -no-color
+          tofu validate -no-color
+        } else {
+          Write-Host "⚠ tofu not installed, skipping"
+        }
+      runner: powershell
+      skip:
+        - merge
+        - rebase
+
+    tflint:
+      description: "TFLint (if present)"
+      run: |
+        if (Get-Command tflint -ErrorAction SilentlyContinue) {
+          tflint --init
+          tflint
+        } else {
+          Write-Host "⚠ tflint not installed, skipping"
+        }
+      runner: powershell
+      skip:
+        - merge
+        - rebase
+
+    tofu-docs:
+      description: "Ensure terraform-docs output is up to date"
+      run: |
+        if (Get-Command terraform-docs -ErrorAction SilentlyContinue) {
+          terraform-docs markdown table . | Out-File -Encoding utf8 README.md
+        } else {
+          Write-Host "⚠ terraform-docs not installed, skipping"
+        }
+      runner: powershell
+      skip:
+        - merge
+        - rebase
+
+    gitguardian:
+      description: "GitGuardian secret scan (staged changes)"
+      run: |
+        if (Get-Command ggshield -ErrorAction SilentlyContinue) {
+          ggshield secret scan pre-commit
+        } else {
+          Write-Host "⚠ ggshield not installed, skipping"
+        }
+      runner: powershell
+      skip:
+        - merge
+        - rebase
+
+pre-push:
+  parallel: false
+  commands:
+    tofu-validate-full:
+      description: "OpenTofu validate on push"
+      run: |
+        if (Get-Command tofu -ErrorAction SilentlyContinue) {
+          tofu init -backend=false -input=false -no-color
+          tofu validate -no-color
+        } else {
+          Write-Host "⚠ tofu not installed, skipping"
+        }
+      runner: powershell
