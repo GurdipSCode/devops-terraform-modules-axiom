@@ -29,5 +29,5 @@ pre-commit:
 pre-push:
   parallel: false
   scripts:
-    ".lefthook/pre-commit/tofu-test.ps1":
+    "tofu-test.ps1":
       runner: powershell
